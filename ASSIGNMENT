@@ -1,0 +1,73 @@
+import os
+import re
+import openpyxl
+import docx
+import PyPDF2
+import pathlib
+import tkinter as tk
+from tkinter import filedialog
+
+# Create a new workbook
+workbook = openpyxl.Workbook()
+sheet = workbook.active
+
+# Define patterns for email and phone number extraction
+email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+phone_pattern = r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b'
+
+# Function to extract data from a Word document
+def extract_data_from_docx(file_path):
+    doc = docx.Document(file_path)
+    text = ''
+    for para in doc.paragraphs:
+        text += para.text + '\n'
+
+    email = re.findall(email_pattern, text)
+    phone = re.findall(phone_pattern, text)
+
+    return email, phone, text
+
+# Function to extract data from a PDF file
+def extract_data_from_pdf(file_path):
+    with open(file_path, 'rb') as file:
+        pdf_reader = PyPDF2.PdfReader(file)
+        text = ''
+        for page_num in range(len(pdf_reader.pages)):
+            page = pdf_reader.pages[page_num]
+            text += page.extract_text()
+
+    email = re.findall(email_pattern, text)
+    phone = re.findall(phone_pattern, text)
+
+    return email, phone, text
+
+# Get the folder path from Jupyter Notebook
+root = tk.Tk()
+root.withdraw()
+folder_path = filedialog.askdirectory(title="Select the folder containing the files")
+folder_path = pathlib.Path(folder_path)
+
+# Iterate over the files in the folder and extract data
+row = 2  # Start from row 2 (row 1 is for headers)
+sheet['A1'] = 'Email'
+sheet['B1'] = 'Phone'
+sheet['C1'] = 'Text'
+
+for file_path in folder_path.glob('*'):
+    if file_path.suffix == '.docx':
+        email, phone, text = extract_data_from_docx(file_path)
+    elif file_path.suffix == '.pdf':
+        email, phone, text = extract_data_from_pdf(file_path)
+    else:
+        continue
+
+    sheet.cell(row=row, column=1, value=', '.join(email))
+    sheet.cell(row=row, column=2, value=', '.join(phone))
+    sheet.cell(row=row, column=3, value=text)
+    row += 1
+
+# Save the workbook to an Excel file
+output_file = folder_path.parent / 'output.xlsx'
+workbook.save(output_file)
+
+print(f"Data saved to {output_file}")
