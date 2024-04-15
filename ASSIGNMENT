@@ -1,73 +1,58 @@
 import os
+import glob
+import pdfplumber
 import re
 import openpyxl
-import docx
-import PyPDF2
-import pathlib
-import tkinter as tk
-from tkinter import filedialog
 
-# Create a new workbook
+# Specify the folder path
+folder_path = os.path.join(os.getcwd(), 'my_folder2')
+
+# Create a new Excel workbook
 workbook = openpyxl.Workbook()
-sheet = workbook.active
+worksheet = workbook.active
 
-# Define patterns for email and phone number extraction
-email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
-phone_pattern = r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b'
+# Write headers to the worksheet
+worksheet['A1'] = 'File Name'
+worksheet['B1'] = 'Email Addresses'
+worksheet['C1'] = 'Phone Numbers'
+worksheet['D1'] = 'Text'
 
-# Function to extract data from a Word document
-def extract_data_from_docx(file_path):
-    doc = docx.Document(file_path)
-    text = ''
-    for para in doc.paragraphs:
-        text += para.text + '\n'
+# Initialize row counter
+row = 2
 
-    email = re.findall(email_pattern, text)
-    phone = re.findall(phone_pattern, text)
+# Loop through all PDF files in the folder
+for file_path in glob.glob(os.path.join(folder_path, '*.pdf')):
+    # Extract the file name
+    file_name = os.path.basename(file_path)
 
-    return email, phone, text
-
-# Function to extract data from a PDF file
-def extract_data_from_pdf(file_path):
-    with open(file_path, 'rb') as file:
-        pdf_reader = PyPDF2.PdfReader(file)
-        text = ''
-        for page_num in range(len(pdf_reader.pages)):
-            page = pdf_reader.pages[page_num]
+    # Open the PDF file
+    with pdfplumber.open(file_path) as pdf:
+        # Extract text from the PDF
+        text = ""
+        for page in pdf.pages:
             text += page.extract_text()
 
-    email = re.findall(email_pattern, text)
-    phone = re.findall(phone_pattern, text)
+    # Find email addresses
+    emails = re.findall(r"[\w\.-]+@[\w\.-]+", text)
 
-    return email, phone, text
+    # Find phone numbers
+    phone_numbers = re.findall(r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b", text)
 
-# Get the folder path from Jupyter Notebook
-root = tk.Tk()
-root.withdraw()
-folder_path = filedialog.askdirectory(title="Select the folder containing the files")
-folder_path = pathlib.Path(folder_path)
-
-# Iterate over the files in the folder and extract data
-row = 2  # Start from row 2 (row 1 is for headers)
-sheet['A1'] = 'Email'
-sheet['B1'] = 'Phone'
-sheet['C1'] = 'Text'
-
-for file_path in folder_path.glob('*'):
-    if file_path.suffix == '.docx':
-        email, phone, text = extract_data_from_docx(file_path)
-    elif file_path.suffix == '.pdf':
-        email, phone, text = extract_data_from_pdf(file_path)
-    else:
-        continue
-
-    sheet.cell(row=row, column=1, value=', '.join(email))
-    sheet.cell(row=row, column=2, value=', '.join(phone))
-    sheet.cell(row=row, column=3, value=text)
-    row += 1
+    # Write data to the worksheet
+    worksheet.cell(row=row, column=1, value=file_name)
+    for email in emails:
+        worksheet.cell(row=row, column=2, value=email)
+        row += 1
+    row_start = row
+    for phone in phone_numbers:
+        worksheet.cell(row=row, column=3, value=phone)
+        row += 1
+    if row > row_start:
+        worksheet.merge_cells(start_row=row_start, start_column=4, end_row=row-1, end_column=4)
+    worksheet.cell(row=row_start, column=4, value=text)
 
 # Save the workbook to an Excel file
-output_file = folder_path.parent / 'output.xlsx'
+output_file = os.path.join(os.getcwd(), "output.xlsx")
 workbook.save(output_file)
 
 print(f"Data saved to {output_file}")
